@@ -1,0 +1,105 @@
+Prediction Assignment - Human Activity Recognition for Weight Lifting Exercise
+========================================================
+```{r echo=FALSE}
+options(warn=-1)
+```
+
+## Synopsis
+This particular document is aimed at predicting how well an activity was performed by a particular participant in a weight lifting exercise.Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this document I have used data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.The data is available at 
+[Weight Lifting Excerice Data](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201)
+I have used Machine Learning algorithms in R to predict the class of WLE dataset. I have first pre processed the data to remove unwanted variables and than used different algorithms on train data to see model accuracy and selected the best among them. Cross Validation set was used for finding out of sample error. Finally I ran my model fit on the testing data provided to check the accuracy.
+
+## Data Processing and Cleaning
+
+In this section we read the raw data from the source we obtained, summarize the data and finally transform and clean the data for our prediction based on which we derive our results and make conclusion.
+
+As a first step here, I am cleaning the data to remove all columns having NA values. This gives me 59 predictor variables for prediction variable "classe". Post that I am removing the variables that I don't think will help much in prediction. Since this is sensor data related prediction we discard the data that we think wont have impact on sensor measure, under certain assumptions. The first 7 variables "X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window" are omitted. They don't appear to be related with sensor reading and are mostly the characteristics of the individual undergoing weight lifting exercise. Hence removing them makes sense.
+
+```{r cache = TRUE}
+##Setting the working directory. 
+setwd("C:\\coursera\\PML")
+##Reading the Raw Data and making blank values NA
+trainingDataRaw <- read.csv("pml-training.csv",header=TRUE,na.strings=c("NA",""))
+testingDataRaw <- read.csv("pml-testing.csv",header=TRUE,na.strings=c("NA",""))
+##Removing columns with at least one NA value
+cleanTrainingData<-trainingDataRaw[ , colSums(is.na(trainingDataRaw)) == 0]
+finalTrainingData<-cleanTrainingData[,8:60]
+cleanTestingData<-testingDataRaw[ , colSums(is.na(testingDataRaw)) == 0]
+finalTestingData<-cleanTestingData[,8:60]
+```
+### Summarizing Data
+Here we see what is the size of data and what the data looks like and what is the structure of data
+```{r cache =TRUE}
+##Finding Number of Variables and Observations
+dim(finalTrainingData)
+```
+### Creating Training and Cross Validation Sets
+ 
+Next I have done is created 2 subsets of data based on "classe". One is training data set which will be used to create the model fit and the other is cross validation data set which will be used to calculate Out of Sample Error.
+
+```{r cache=TRUE}
+library(caret)
+inBuild <- createDataPartition(y=finalTrainingData$classe,
+                               p=0.7, list=FALSE)
+validation <-finalTrainingData[-inBuild,]
+training <- finalTrainingData[inBuild,]
+dim(training)
+dim(validation)
+```
+## Model Building
+
+I used two different algorithms here to see which one gives better accuracy. The first algorithm I used is Random Forest. The 2nd model I used was using the Boosting method.
+Based on the accuracy of the 2 models I have selected the one with higher accuracy and calculated Out of Sample Error in Results section
+
+```{r cache=TRUE}
+##Creating RF mdoel, predicting and calculating Confusion Matrix on Cross Validaton Set
+set.seed(6677)
+modFitRF <- train(classe ~ .,method="rf",data=training, trControl = trainControl(method = "cv", number = 4))
+modFitRF
+validateRF<-predict(modFitRF,newdata=validation)
+crf<-confusionMatrix(validateRF, validation$classe)
+
+##Creating GBM model, predicting and calculating Confusion Matrix on Cross Validaton Set
+set.seed(6688)
+modFitGBM <- train(classe ~ .,method="gbm",data=training, trControl = trainControl(method = "cv", number = 4), verbose=FALSE)
+modFitGBM
+validateGBM<-predict(modFitGBM,newdata=validation)
+cgbm<-confusionMatrix(validateGBM, validation$classe)
+```
+
+## Results
+
+The accuracy for 2 models on Cross Validation set is shown below:
+```{r}
+##Random Forest Accuracy on Cross Validation Set
+crf$overall[1]
+##Boosting Model Accuracy
+cgbm$overall[1]
+```
+
+Based on the above we see that Random Forest model is a better fit for the given data.
+The out of sample error for Cross Validation Set is as below. As we see Out of Sample error is very small and is less than 1% indicating a very good fit.
+```{r}
+(1 - ( sum( validateRF == validation$classe) / length(validateRF)))*100
+```
+
+## Test Set Prediction
+
+Based on the RF output, I have generated the Prediction on the Test Set and saved it in directory as shown below for submission.
+```{r }
+testRF<-predict(modFitRF, newdata=finalTestingData)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(testRF)
+```
+
+## Conclusion
+
+Based on the above analysis we were able to obtain a very good predictor model using Random Forest Algorithm. The model worked well on Cross Validation set giving high accuracy and small out of sample error.
+Using that model we were able to predict the values on our Test Set.
+If we look at the output of Random Forest model we can see that only 2 variables are good enough predictors to give us high accuracy. It would be worthwhile to find those 2 predictors and build a model and see whether its true or not. There is a good scope of further exploration here.
